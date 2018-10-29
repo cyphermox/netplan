@@ -83,6 +83,23 @@ write_bridge_params(GString* s, net_definition* def)
 }
 
 static void
+write_tunnel_params(GString* s, net_definition* def)
+{
+    GString *params = NULL;
+
+    params = g_string_sized_new(200);
+
+    g_string_append_printf(params, "Mode=%s\n", def->tunnel.mode);
+    if (def->tunnel.input_key)
+        g_string_append_printf(params, "InputKey=%s\n", def->tunnel.input_key);
+    if (def->tunnel.output_key)
+        g_string_append_printf(params, "OutputKey=%s\n", def->tunnel.output_key);
+
+    g_string_append_printf(s, "\n[Bridge]\n%s", params->str);
+    g_string_free(params, TRUE);
+}
+
+static void
 write_link_file(net_definition* def, const char* rootdir, const char* path)
 {
     GString* s = NULL;

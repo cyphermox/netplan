@@ -481,6 +481,36 @@ handle_netdef_guint(yaml_document_t* doc, yaml_node_t* node, const void* data, G
     return TRUE;
 }
 
+static gboolean
+handle_netdef_ip4(yaml_document_t* doc, yaml_node_t* node, const void* data, GError** error)
+{
+    guint offset = GPOINTER_TO_UINT(data);
+    char** dest = (char**) ((void*) cur_netdef + offset);
+    g_autofree char* addr = NULL;
+    struct in_addr a4;
+    int ret;
+
+    /* these addresses can't have /prefix_len */
+    addr = g_strdup(scalar(node));
+    prefix_len = strrchr(addr, '/');
+    if (prefix_len)
+        return yaml_error(node, error,
+                          "invalid address: a single IPv4 address (without /prefixlength) is required");
+
+    /* is it an IPv4 address? */
+    ret = inet_pton(AF_INET, addr, &a4);
+    g_assert(ret >= 0);
+    if (ret <= 0)
+        return yaml_error(node, error,
+                          "invalid IPv4 address: %s", scalar(node));
+
+    g_free(*dest);
+    *dest = g_strdup(scalar(node));
+
+    return TRUE;
+}
+
+
 /****************************************************
  * Grammar and handlers for network config "match" entry
  ****************************************************/
@@ -1383,6 +1413,35 @@ handle_dhcp_identifier(yaml_document_t* doc, yaml_node_t* node, const void* data
 }
 
 /****************************************************
+ * Grammar and handlers for tunnels
+ ****************************************************/
+
+static gboolean
+handle_tunnel_key(yaml_document_t* doc, yaml_node_t* node, const void* data, GError** error)
+{
+    /* Tunnel key should be a number or dotted quad. */
+    guint offset = GPOINTER_TO_UINT(data);
+    char** dest = (char**) ((void*) cur_netdef + offset);
+    guint64 v;
+    gchar* endptr;
+    struct in_addr a4;
+
+    v = g_ascii_strtoull(scalar(node), &endptr, 10);
+    if (*endptr != '\0' || v > G_MAXUINT) {
+        /* Not a simple uint, try for a dotted quad */
+        int ret = inet_pton(AF_INET, scalar(node), &a4);
+        g_assert(ret >= 0);
+        if (ret == 0)
+            return yaml_error(node, error, "invalid tunnel key '%s'", scalar(node));
+    }
+
+    g_free(*dest);
+    *dest = g_strdup(scalar(node));
+
+    return TRUE;
+}
+
+/****************************************************
  * Grammar and handlers for network devices
  ****************************************************/
 
@@ -1469,6 +1528,17 @@ const mapping_entry_handler vlan_def_handlers[] = {
     COMMON_LINK_HANDLERS,
     {"id", YAML_SCALAR_NODE, handle_netdef_guint, NULL, netdef_offset(vlan_id)},
     {"link", YAML_SCALAR_NODE, handle_netdef_id_ref, NULL, netdef_offset(vlan_link)},
+    {NULL}
+};
+
+const mapping_entry_handler tunnel_def_handlers[] = {
+    COMMON_LINK_HANDLERS,
+    {"mode", YAML_SCALAR_NODE, handle_netdef_str, NULL, netdef_offset(tunnel_mode)},
+    {"parent", YAML_SCALAR_NODE, handle_netdef_id_ref, NULL, netdef_offset(tunnel_parent)},
+    {"local", YAML_SCALAR_NODE, handle_netdef_ip4, NULL, netdef_offset(tunnel_local_ip)},
+    {"remote", YAML_SCALAR_NODE, handle_netdef_ip4, NULL, netdef_offset(tunnel_remote_ip)},
+    {"input-key", YAML_SCALAR_NODE, handle_tunnel_key, NULL, netdef_offset(tunnel_input_key)},
+    {"output-key", YAML_SCALAR_NODE, handle_tunnel_key, NULL, netdef_offset(tunnel_output_key)},
     {NULL}
 };
 
@@ -1595,11 +1665,12 @@ handle_network_type(yaml_document_t* doc, yaml_node_t* node, const void* data, G
 
         /* and fill it with definitions */
         switch (cur_netdef->type) {
-            case ND_ETHERNET: handlers = ethernet_def_handlers; break;
-            case ND_WIFI: handlers = wifi_def_handlers; break;
-            case ND_BRIDGE: handlers = bridge_def_handlers; break;
             case ND_BOND: handlers = bond_def_handlers; break;
+            case ND_BRIDGE: handlers = bridge_def_handlers; break;
+            case ND_ETHERNET: handlers = ethernet_def_handlers; break;
+            case ND_TUNNEL: handlers = tunnel_def_handlers; break;
             case ND_VLAN: handlers = vlan_def_handlers; break;
+            case ND_WIFI: handlers = wifi_def_handlers; break;
             default: g_assert_not_reached(); // LCOV_EXCL_LINE
         }
         if (!process_mapping(doc, value, handlers, error))
@@ -1619,13 +1690,14 @@ handle_network_type(yaml_document_t* doc, yaml_node_t* node, const void* data, G
 }
 
 const mapping_entry_handler network_handlers[] = {
-    {"version", YAML_SCALAR_NODE, handle_network_version},
-    {"renderer", YAML_SCALAR_NODE, handle_network_renderer},
-    {"ethernets", YAML_MAPPING_NODE, handle_network_type, NULL, GUINT_TO_POINTER(ND_ETHERNET)},
-    {"wifis", YAML_MAPPING_NODE, handle_network_type, NULL, GUINT_TO_POINTER(ND_WIFI)},
-    {"bridges", YAML_MAPPING_NODE, handle_network_type, NULL, GUINT_TO_POINTER(ND_BRIDGE)},
     {"bonds", YAML_MAPPING_NODE, handle_network_type, NULL, GUINT_TO_POINTER(ND_BOND)},
+    {"bridges", YAML_MAPPING_NODE, handle_network_type, NULL, GUINT_TO_POINTER(ND_BRIDGE)},
+    {"ethernets", YAML_MAPPING_NODE, handle_network_type, NULL, GUINT_TO_POINTER(ND_ETHERNET)},
+    {"renderer", YAML_SCALAR_NODE, handle_network_renderer},
+    {"tunnels", YAML_MAPPING_NODE, handle_network_type, NULL, GUINT_TO_POINTER(ND_TUNNEL)},
+    {"version", YAML_SCALAR_NODE, handle_network_version},
     {"vlans", YAML_MAPPING_NODE, handle_network_type, NULL, GUINT_TO_POINTER(ND_VLAN)},
+    {"wifis", YAML_MAPPING_NODE, handle_network_type, NULL, GUINT_TO_POINTER(ND_WIFI)},
     {NULL}
 };
 
