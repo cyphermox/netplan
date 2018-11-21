@@ -32,8 +32,7 @@ parts:
       - python3-netifaces
       - python3-nose
       - pyflakes3
-      - pycodestyle
-      #- pep8
+      - pep8
       - systemd
     stage-packages:
       - iproute2
