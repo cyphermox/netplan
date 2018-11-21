@@ -1,5 +1,5 @@
-name: netplan
-version: '0.90'
+name: cyphermox-netplan
+version: git
 summary: Backend-agnostic network configuration in YAML
 description: |
   Netplan is a utility for easily configuring networking on a linux system.
