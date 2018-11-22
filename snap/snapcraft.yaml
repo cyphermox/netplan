@@ -12,7 +12,7 @@ confinement: strict
 apps:
   netplan:
     command: usr/sbin/netplan
-    plugs: [network-control]
+    plugs: [network-control, network-setup-control]
     environment:
       PYTHONPATH: $PYTHONPATH:$SNAP/usr/lib/python3/dist-packages
       NETPLAN_GENERATE_PATH: $SNAP/lib/netplan/generate
