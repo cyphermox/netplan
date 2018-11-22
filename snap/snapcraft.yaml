@@ -7,12 +7,12 @@ description: |
   what each should be configured to do. From this description Netplan will
   generate all the necessary configuration for your chosen renderer tool.
 grade: devel
-confinement: classic
+confinement: strict
 
 apps:
   netplan:
     command: usr/sbin/netplan
-    plugs: [network]
+    plugs: [network-control]
     environment:
       PYTHONPATH: $PYTHONPATH:$SNAP/usr/lib/python3/dist-packages
 
